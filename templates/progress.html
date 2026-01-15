@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .btn-retry {
+        border-color: var(--neon-red);
+        color: var(--neon-red);
+        box-shadow: 0 0 10px rgba(255, 0, 85, 0.2);
+    }
+    .btn-retry:hover {
+        background: var(--neon-red);
+        color: #fff;
+        box-shadow: 0 0 20px var(--neon-red);
+    }
+
+    .completion-container {
+        display: none;
+        margin-top: 30px;
+        text-align: center;
+        animation: fadeIn 0.5s ease-in;
+    }
+
+    .success-icon {
+        font-size: 4em;
+        color: var(--neon-gold);
+        text-shadow: 0 0 25px var(--neon-gold);
+        margin-bottom: 15px;
+    }
+
+    .success-text {
+        color: var(--neon-gold);
+        font-size: 1.2em;
+        margin-bottom: 30px;
+        letter-spacing: 2px;
+    }
+    
+    .action-group {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .btn-primary-action {
+        background: rgba(0, 243, 255, 0.1);
+        border: 1px solid var(--neon-blue);
+        color: var(--neon-blue);
+        font-size: 1.1em;
+        padding: 18px;
+    }
+    .btn-primary-action:hover {
+        background: var(--neon-blue);
+        color: #000;
+        box-shadow: 0 0 25px var(--neon-blue);
+    }
+
+    .btn-secondary-action {
+        border: 1px dashed var(--text-dim);
+        color: var(--text-dim);
+        font-size: 0.9em;
+        padding: 12px;
+        width: 60%; 
+        margin: 0 auto; 
+    }
+    .btn-secondary-action:hover {
+        border-color: var(--neon-gold);
+        color: var(--neon-gold);
+        background: rgba(255, 215, 0, 0.05);
+    }
+    
+    .error-console {
+        background: rgba(255, 0, 85, 0.05);
+        border: 1px dashed var(--neon-red);
+        padding: 15px;
+        margin: 20px 0;
+        display: none;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
+<h1>任務執行監控</h1>
+
+<div id="status-display" class="status-text">正在建立加密連接...</div>
+
+<div class="progress-container">
+    <div id="progress-bar" class="progress-bar"></div>
+</div>
+
+<div id="tech-stats" style="display: flex; justify-content: space-between; font-size: 0.8em; color: var(--text-dim); font-family: monospace;">
+    <span id="speed-stat">SPEED: 0.00 MB/s</span>
+    <span id="eta-stat">ETA: --:--</span>
+</div>
+
+<div id="error-area" class="error-console">
+    <div id="error-message" style="color: var(--neon-red); margin-bottom: 15px;"></div>
+    <button onclick="triggerRetry()" class="btn btn-retry">>> 啟動故障恢復協議 (RETRY) <<</button>
+</div>
+
+<div id="completion-area" class="completion-container">
+    <div class="success-icon">✓</div>
+    <div class="success-text">>> 數據傳輸完畢 <<</div>
+    
+    <div class="action-group">
+        <a href="/" class="btn btn-primary-action">返回主控制台(初始化新任務)</a>
+        <button onclick="openLocation()" class="btn btn-secondary-action">📂 開啟資料儲存位置</button>
+    </div>
+</div>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const jobId = urlParams.get('job_id');
+    
+    const els = {
+        status: document.getElementById('status-display'),
+        bar: document.getElementById('progress-bar'),
+        speed: document.getElementById('speed-stat'),
+        eta: document.getElementById('eta-stat'),
+        errorArea: document.getElementById('error-area'),
+        errorMsg: document.getElementById('error-message'),
+        completionArea: document.getElementById('completion-area'),
+        stats: document.getElementById('tech-stats')
+    };
+
+    let isRetrying = false;
+    let pollInterval;
+
+    function startPolling() {
+        if (!jobId) {
+            els.status.textContent = 'CRITICAL ERROR: MISSING JOB ID';
+            return;
+        }
+        
+        els.errorArea.style.display = 'none';
+        els.completionArea.style.display = 'none';
+        els.stats.style.display = 'flex';
+        els.bar.style.backgroundColor = 'var(--neon-blue)';
+        
+        pollInterval = setInterval(() => {
+            fetch(`/job_status?job_id=${encodeURIComponent(jobId)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'unknown') {
+                        handleError('任務信號丟失 (Job Not Found)');
+                        clearInterval(pollInterval);
+                    } 
+                    else if (data.status === 'done' && data.file) {
+                        finishJob();
+                    } 
+                    else if (data.status === 'error') {
+                        handleError(data.message || 'Unknown Error');
+                        clearInterval(pollInterval);
+                    } 
+                    else {
+                        updateProgress(data);
+                    }
+                })
+                .catch(e => {
+                    console.error(e);
+                    els.status.textContent = 'CONNECTION INTERRUPTED';
+                });
+        }, 1000);
+    }
+
+    function updateProgress(data) {
+        els.status.textContent = `${data.status.toUpperCase()}... [${data.progress_percent}%]`;
+        els.bar.style.width = `${data.progress_percent}%`;
+        if(data.speed) els.speed.textContent = `SPEED: ${data.speed}`;
+        if(data.eta) els.eta.textContent = `ETA: ${data.eta}s`;
+    }
+
+    function finishJob() {
+        els.status.textContent = 'PROCESS COMPLETE: 100%';
+        els.bar.style.width = '100%';
+        els.bar.style.backgroundColor = 'var(--neon-gold)';
+        els.bar.style.boxShadow = '0 0 15px var(--neon-gold)';
+        
+        els.stats.style.display = 'none';
+        els.completionArea.style.display = 'block';
+        clearInterval(pollInterval);
+    }
+
+    function handleError(msg) {
+        els.status.textContent = 'PROCESS FAILED';
+        els.status.style.color = 'var(--neon-red)';
+        els.bar.style.backgroundColor = 'var(--neon-red)';
+        
+        els.errorMsg.textContent = `[ERROR LOG]: ${msg}`;
+        els.errorArea.style.display = 'block';
+        els.stats.style.display = 'none';
+    }
+
+    function openLocation() {
+        const btn = document.querySelector('.btn-secondary-action');
+        const originalText = btn.textContent;
+        btn.textContent = '正在呼叫檔案總管...';
+        
+        fetch('/open_location', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({job_id: jobId})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if(data.status !== 'ok') alert('錯誤: ' + data.message);
+            btn.textContent = originalText;
+        })
+        .catch(() => btn.textContent = originalText);
+    }
+
+    window.triggerRetry = function() {
+        if(isRetrying) return;
+        isRetrying = true;
+        
+        els.status.textContent = 'RE-INITIALIZING...';
+        els.status.style.color = 'var(--neon-blue)';
+        els.errorArea.style.display = 'none';
+        
+        fetch('/retry', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({job_id: jobId})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if(data.status === 'ok') {
+                isRetrying = false;
+                startPolling();
+            } else {
+                alert("重試失敗: " + data.message);
+                isRetrying = false;
+                els.errorArea.style.display = 'block';
+            }
+        })
+        .catch(() => {
+            alert("連接失敗");
+            isRetrying = false;
+            els.errorArea.style.display = 'block';
+        });
+    };
+
+    startPolling();
+</script>
+{% endblock %}

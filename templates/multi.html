@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>批量矩陣下載</h1>
+
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form method="POST" action="/download_multi">
+    <div class="form-group">
+        <label for="video_links">> 輸入數據流列表 (每行一個鏈接, MAX: 25):</label>
+        <textarea id="video_links" name="video_links" required placeholder="URL_01&#10;URL_02&#10;URL_03..."></textarea>
+    </div>
+    <button type="submit" class="btn">啟動批量處理序列</button>
+</form>
+
+<a href="/" class="btn btn-secondary">返回主控制台</a>
+{% endblock %}

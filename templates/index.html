@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>系統連接就緒</h1>
+
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert">[SYSTEM_MSG]: {{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form method="POST" action="/">
+    <div class="form-group">
+        <label for="video_url">> 輸入目標數據 (YOUTUBE URL):</label>
+        <input type="text" id="video_url" name="video_url" required placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+    </div>
+    <button type="submit" class="btn">初始化分析程序</button>
+</form>
+
+<div class="nav-links">
+    <a href="/multi" class="btn btn-secondary">切換至批量矩陣下載</a>
+</div>
+{% endblock %}
